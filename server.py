@@ -217,6 +217,24 @@ class Handler(BaseHTTPRequestHandler):
         except Problem as e: self.send(e.status,{'error':e.message})
         except Exception: self.send(500,{'error':'서버 오류입니다. 운영자에게 문의해 주세요.'})
 
+def database_startup_error(error):
+    """Return fixed diagnostic labels, never raw DB messages or credentials."""
+    code=getattr(error,'sqlstate',None)
+    if code in ('28P01','28000'): return 'DB_AUTH: DB 비밀번호 또는 pooler 사용자명을 확인하세요.'
+    if code in ('42P01','3F000'): return 'DB_SCHEMA: raffle 스키마 또는 테이블이 없습니다. SQL을 실행한 프로젝트를 확인하세요.'
+    if code=='42501': return 'DB_PERMISSION: 데이터베이스 연결 계정의 raffle 접근 권한을 확인하세요.'
+    if code=='3D000': return 'DB_NAME: 연결 주소의 데이터베이스 이름을 확인하세요.'
+    # Inspect privately, then output only fixed labels. Raw text can contain secrets.
+    text=str(error).lower()
+    if 'tenant or user not found' in text: return 'DB_POOLER_USER: 프로젝트 번호가 포함된 pooler 사용자명을 확인하세요.'
+    if 'password authentication failed' in text or 'authentication failed' in text: return 'DB_AUTH: DB 비밀번호 또는 pooler 사용자명을 확인하세요.'
+    if any(x in text for x in ('could not translate host','name or service not known','failed to resolve','nodename nor servname')): return 'DB_DNS: 데이터베이스 호스트 주소를 확인하세요.'
+    if 'network is unreachable' in text: return 'DB_NETWORK: 데이터베이스 네트워크 연결에 실패했습니다.'
+    if 'timeout' in text or 'timed out' in text: return 'DB_TIMEOUT: 연결 시간 초과입니다. 프로젝트 실행 상태와 네트워크 제한을 확인하세요.'
+    if any(x in text for x in ('ssl','certificate','tls')): return 'DB_TLS: 암호화 연결 또는 인증서 설정을 확인하세요.'
+    if any(x in text for x in ('invalid dsn','invalid connection','invalid uri','invalid percent','missing \"=\"','invalid integer value')): return 'DB_URL: DATABASE_URL 형식과 비밀번호의 percent encoding을 확인하세요.'
+    return 'DB_UNKNOWN: 데이터베이스 연결 또는 스키마 조회 실패입니다. 공개 로그에는 접속 정보를 출력하지 않습니다.'
+
 def main():
     import argparse
     parser=argparse.ArgumentParser(); parser.add_argument('--hash-password',action='store_true'); args=parser.parse_args()
@@ -241,7 +259,7 @@ def main():
     store=PostgresStore(url,key.encode())
     try:
         store.snapshot()
-    except Exception:
-        raise SystemExit('데이터베이스 연결 또는 raffle 스키마를 확인하세요. 자세한 접속 정보는 출력하지 않습니다.')
+    except Exception as error:
+        raise SystemExit(database_startup_error(error)) from None
     App(('0.0.0.0',int(os.environ.get('PORT','8080'))),store,password_hash,origin).serve_forever()
 if __name__=='__main__': main()
