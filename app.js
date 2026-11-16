@@ -4,6 +4,11 @@ const quotas={1:1,2:5,3:3,4:3};
 let csrf='',state=null,busy=false,lastCount=null,lastDraw='',revealTimer=null,receiptReady=false;
 function message(text){$('message').textContent=text||'';}
 async function api(path,data){
+ // Refresh against the current HttpOnly session cookie before each mutation.
+ // Another tab may have signed in, or initial session loading may have failed.
+ if(data!==undefined && path.startsWith('/api/admin/')){
+  csrf=(await api('/api/admin/session')).csrf;
+ }
  const response=await fetch(path,{method:data===undefined?'GET':'POST',headers:data===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:data===undefined?undefined:JSON.stringify(data),cache:'no-store'});
  let result; try{result=await response.json();}catch{throw new Error('서버 연결을 확인해 주세요.');}
  if(!response.ok){const e=new Error(result.error||'요청을 처리하지 못했습니다.');e.status=response.status;throw e;}
