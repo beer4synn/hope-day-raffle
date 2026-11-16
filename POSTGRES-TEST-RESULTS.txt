@@ -1,0 +1,13 @@
+test_150_atomic_draw_restore (__main__.PostgresRaffleTest.test_150_atomic_draw_restore) ... ok
+test_database_api_roles_have_no_access (__main__.PostgresRaffleTest.test_database_api_roles_have_no_access) ... ok
+test_duplicate_race (__main__.PostgresRaffleTest.test_duplicate_race) ... ok
+test_failed_login_commits_rate_limit (__main__.PostgresRaffleTest.test_failed_login_commits_rate_limit) ... ok
+test_http_mobile_beam_auth_csrf_and_restart (__main__.PostgresRaffleTest.test_http_mobile_beam_auth_csrf_and_restart) ... ok
+test_insufficient_no_partial_winners (__main__.PostgresRaffleTest.test_insufficient_no_partial_winners) ... ok
+test_normalization_and_storage (__main__.PostgresRaffleTest.test_normalization_and_storage) ... ok
+test_registration_close_race (__main__.PostgresRaffleTest.test_registration_close_race) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 13.929s
+
+OK

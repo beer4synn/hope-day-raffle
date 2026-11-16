@@ -1,0 +1,12 @@
+test_150_atomic_draw_restore (test_app.RaffleTest.test_150_atomic_draw_restore) ... ok
+test_duplicate_race (test_app.RaffleTest.test_duplicate_race) ... ok
+test_failed_login_commits_rate_limit (test_app.RaffleTest.test_failed_login_commits_rate_limit) ... ok
+test_http_mobile_beam_auth_csrf_and_restart (test_app.RaffleTest.test_http_mobile_beam_auth_csrf_and_restart) ... ok
+test_insufficient_no_partial_winners (test_app.RaffleTest.test_insufficient_no_partial_winners) ... ok
+test_normalization_and_storage (test_app.RaffleTest.test_normalization_and_storage) ... ok
+test_registration_close_race (test_app.RaffleTest.test_registration_close_race) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 3.565s
+
+OK
