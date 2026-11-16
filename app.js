@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id),page=document.body.dataset.page;
 const quotas={1:1,2:5,3:3,4:3};
-let csrf='',state=null,busy=false,lastCount=null,lastDraw='',revealTimer=null,receiptReady=false;
+let csrf='',state=null,busy=false,lastCount=null,lastDraw='',revealTimer=null,receiptReady=false,preparedRank=null;
 function message(text){$('message').textContent=text||'';}
 async function api(path,data){
  // Refresh against the current HttpOnly session cookie before each mutation.
@@ -15,7 +15,8 @@ async function api(path,data){
  return result;
 }
 function label(entry){return entry.nickname+' · '+entry.ending;}
-function list(id,entries,numbers=false){$(id).replaceChildren(...entries.map(e=>{const li=document.createElement('li');li.textContent=label(e);if(numbers){const n=document.createElement('small');n.textContent='응모번호 '+String(e.number).padStart(3,'0');li.append(n);}return li;}));}
+function winnerRow(e,numbers=false){const li=document.createElement('li');li.textContent=label(e);if(numbers){const n=document.createElement('small');n.textContent='응모번호 '+String(e.number).padStart(3,'0');li.append(n);}return li;}
+function list(id,entries,numbers=false){$(id).replaceChildren(...entries.map(e=>winnerRow(e,numbers)));}
 function receipt(r){receiptReady=true;$('receiptNumber').textContent=String(r.number).padStart(3,'0');$('receiptLabel').textContent=label(r);$('joinCard').hidden=true;$('receiptCard').hidden=false;}
 async function joinStatus(){if(receiptReady)return;try{const s=await api('/api/status');$('joinStatus').textContent=s.open?'접수 중':'접수 대기 / 마감';$('joinButton').disabled=!s.open||busy;}catch{ $('joinStatus').textContent='연결 확인 필요';$('joinButton').disabled=true;}}
 if(page==='join'){
@@ -27,6 +28,8 @@ function renderAdmin(){
  $('openRegistration').disabled=busy||!!state.is_open||Object.values(state.results).some(a=>a.length);
  $('closeRegistration').disabled=busy||!state.is_open;
  list('adminRecent',state.recent,true);
+ const allWinners=Object.values(state.results).flat(),uniqueWinners=new Set(allWinners.map(e=>e.number));
+ if($('resultAudit'))$('resultAudit').textContent='전체 당첨 '+allWinners.length+'명 · 고유 응모번호 '+uniqueWinners.size+'개 · 등수 간 중복 '+(allWinners.length-uniqueWinners.size)+'건';
  const rank=$('rank').value,result=state.results[rank];
  $('pick').disabled=busy||!!state.is_open||state.view!=='draw'||state.rank!==Number(rank)||result.length>0;
  $('pick').textContent=result.length?'당첨 결과 저장됨':'당첨자 뽑기';
@@ -47,24 +50,43 @@ if(page==='admin'){
  $('logout').onclick=async()=>{try{await api('/api/admin/logout',{});state=null;csrf='';$('loginCard').hidden=false;$('adminContent').hidden=true;}catch(e){message(e.message);}};
  (async()=>{try{csrf=(await api('/api/admin/session')).csrf;await pollAdmin();if(state)$('prize').value=state.prizes[$('rank').value];}catch{}setInterval(pollAdmin,1500);})();
 }
+// Winners are already committed on the server. These delays affect presentation only.
+const MULTI_FIRST_DELAY=2000,WINNER_INTERVAL=2500,FIRST_PRIZE_DELAY=5000;
+function showWinners(result,rank,animate){
+ clearTimeout(revealTimer);revealTimer=null;$('draw').classList.remove('pulse');
+ $('winners').classList.toggle('five-winners',result.length===5);
+ if(!animate){list('winners',result,true);$('drawStatus').textContent=result.length?'축하합니다!':quotas[rank]+'명을 추첨합니다.';return;}
+ $('winners').replaceChildren(...result.map((_,i)=>{
+  const slot=document.createElement('li');slot.className='pending-winner';slot.textContent=(i+1)+'번째 행운의 주인공';return slot;
+ }));
+ $('draw').classList.add('pulse');$('drawStatus').textContent=rank===1?'두근두근… 1등 행운의 주인공은?':'두근두근… 당첨자를 한 명씩 공개합니다!';
+ let revealed=0;
+ function revealNext(){
+  $('winners').children[revealed].replaceWith(winnerRow(result[revealed],true));revealed++;
+  $('drawStatus').textContent=revealed===result.length?'모두 축하합니다!':revealed+' / '+result.length+'명 공개 · 다음 주인공은?';
+  if(revealed<result.length)revealTimer=setTimeout(revealNext,WINNER_INTERVAL);
+  else{$('draw').classList.remove('pulse');revealTimer=null;}
+ }
+ revealTimer=setTimeout(revealNext,rank===1?FIRST_PRIZE_DELAY:MULTI_FIRST_DELAY);
+}
 function display(s){
+ if($('restoreNotice'))$('restoreNotice').hidden=true;
  $('displayIntro').textContent=s.is_open?'휴대폰 카메라로 QR을 찍고 경품 추첨에 참여하세요.':'접수가 마감되었습니다. 행운의 주인공을 기다려 주세요!';
  $('qrCaption').textContent=s.is_open?'휴대폰으로 응모하기':'접수 대기 / 마감';$('joinAddress').textContent=location.origin+'/';
  $('count').textContent=s.count;
  if(lastCount!==s.count){list('recent',s.recent);$('friends').textContent=['🎁','🐣','🐰','🐻','🦊'].slice(0,1+Math.min(4,Math.ceil(s.count/15))).join(' ');$('friends').classList.remove('hop');if(lastCount!==null)requestAnimationFrame(()=>requestAnimationFrame(()=>$('friends').classList.add('hop')));lastCount=s.count;}
  $('waiting').hidden=s.view==='draw';$('draw').hidden=s.view!=='draw';
- const result=s.results[String(s.rank)],key=String(s.rank)+':'+result.map(e=>e.number).join(',');
+ const result=s.results[String(s.rank)],key=s.view+':'+s.rank+':'+result.map(e=>e.number).join(',');
  $('drawTitle').textContent=s.rank+'등 '+(result.length?'당첨자':'추첨');$('displayPrize').textContent=s.prizes[String(s.rank)];
- if(key!==lastDraw||s.view!=='draw'){
- clearTimeout(revealTimer);$('draw').classList.remove('pulse');
- const animate=s.view==='draw'&&result.length>0&&lastDraw===String(s.rank)+':';
- list('winners',animate?[]:result,true);$('drawStatus').textContent=result.length?'축하합니다!':quotas[s.rank]+'명을 추첨합니다.';
- if(animate){$('drawStatus').textContent='두근두근… 추첨 중!';$('draw').classList.add('pulse');revealTimer=setTimeout(()=>{$('draw').classList.remove('pulse');list('winners',result,true);$('drawStatus').textContent='축하합니다!';},900);}
- lastDraw=key;
+ if(key!==lastDraw){
+  const animate=s.view==='draw'&&result.length>0&&preparedRank===s.rank;
+  showWinners(result,s.rank,animate);
+  preparedRank=s.view==='draw'&&result.length===0?s.rank:null;
+  lastDraw=key;
  }
 }
 if(page==='display'){
  $('full').onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
  async function poll(){try{const s=await api('/api/admin/state');$('connection').hidden=true;message('');display(s);}catch(e){$('connection').hidden=false;if(e.status===401){message('운영자 로그인이 필요합니다. 운영자 화면에서 로그인한 뒤 새로고침해 주세요.');$('waiting').hidden=true;$('draw').hidden=true;}}}
- poll();setInterval(poll,1000);
+ async function refresh(){await poll();setTimeout(refresh,1000);}refresh();
 }
